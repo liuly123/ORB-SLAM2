@@ -43,12 +43,30 @@ using namespace std;
 namespace ORB_SLAM2
 {
 
-Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Map *pMap, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor):
-    mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(false), mbVO(false), mpORBVocabulary(pVoc),
-    mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
-    mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
+Tracking::Tracking(
+      System *pSys,                       //系统实例
+      ORBVocabulary* pVoc,                //BOW字典
+      FrameDrawer *pFrameDrawer,          //帧绘制器
+      MapDrawer *pMapDrawer,              //地图点绘制器
+      Map *pMap,                          //地图句柄
+      KeyFrameDatabase* pKFDB,            //关键帧产生的词袋数据库
+      const string &strSettingPath,       //配置文件路径
+      const int sensor):                  //传感器类型
+      mState(NO_IMAGES_YET),                              //当前系统还没有准备好
+      mSensor(sensor),
+      mbOnlyTracking(false),                              //处于SLAM模式
+      mbVO(false),                                        //当处于纯跟踪模式的时候，这个变量表示了当前跟踪状态的好坏
+      mpORBVocabulary(pVoc),
+      mpKeyFrameDB(pKFDB),
+      mpInitializer(static_cast<Initializer*>(NULL)),     //暂时给地图初始化器设置为空指针
+      mpSystem(pSys),
+      mpViewer(NULL),                                     //注意可视化的查看器是可选的，因为ORB-SLAM2最后是被编译成为一个库，所以对方人拿过来用的时候也应该有权力说我不要可视化界面（何况可视化界面也要占用不少的CPU资源）
+      mpFrameDrawer(pFrameDrawer),
+      mpMapDrawer(pMapDrawer),
+      mpMap(pMap),
+      mnLastRelocFrameId(0)                               //恢复为0,没有进行这个过程的时候的默认值
 {
-    // Load camera parameters from settings file
+    // **************************************************************从配置文件加载相机参数*******************************************************************************
 
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
     float fx = fSettings["Camera.fx"];
@@ -56,14 +74,14 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     float cx = fSettings["Camera.cx"];
     float cy = fSettings["Camera.cy"];
 
-    cv::Mat K = cv::Mat::eye(3,3,CV_32F);
+    cv::Mat K = cv::Mat::eye(3,3,CV_32F);//内参矩阵K
     K.at<float>(0,0) = fx;
     K.at<float>(1,1) = fy;
     K.at<float>(0,2) = cx;
     K.at<float>(1,2) = cy;
     K.copyTo(mK);
 
-    cv::Mat DistCoef(4,1,CV_32F);
+    cv::Mat DistCoef(4,1,CV_32F);//畸变矩阵
     DistCoef.at<float>(0) = fSettings["Camera.k1"];
     DistCoef.at<float>(1) = fSettings["Camera.k2"];
     DistCoef.at<float>(2) = fSettings["Camera.p1"];
@@ -78,11 +96,11 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 
     mbf = fSettings["Camera.bf"];
 
-    float fps = fSettings["Camera.fps"];
+    float fps = fSettings["Camera.fps"];//fps
     if(fps==0)
         fps=30;
 
-    // Max/Min Frames to insert keyframes and to check relocalisation
+    // 插入关键帧和检查重定位的最多/最少帧
     mMinFrames = 0;
     mMaxFrames = fps;
 
@@ -108,7 +126,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     else
         cout << "- color order: BGR (ignored if grayscale)" << endl;
 
-    // Load ORB parameters
+    // **************************************************************从配置文件加载ORB字典参数*******************************************************************************
 
     int nFeatures = fSettings["ORBextractor.nFeatures"];
     float fScaleFactor = fSettings["ORBextractor.scaleFactor"];

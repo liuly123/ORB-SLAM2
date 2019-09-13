@@ -22,7 +22,7 @@
 #include<iostream>
 #include<algorithm>
 #include<fstream>
-#include<chrono>
+#include<chrono>//时间库，精度高
 
 #include<opencv2/core/core.hpp>
 
@@ -41,14 +41,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Retrieve paths to images
+    //从命令行获取associate.txt文件路径并Load
     vector<string> vstrImageFilenamesRGB;
     vector<string> vstrImageFilenamesD;
-    vector<double> vTimestamps;
+    vector<double> vTimestamps;//每帧RGB-D图像的时刻
     string strAssociationFilename = string(argv[4]);
     LoadImages(strAssociationFilename, vstrImageFilenamesRGB, vstrImageFilenamesD, vTimestamps);
 
-    // Check consistency in the number of images and depthmaps
+    // 检查图像数量和深度的一致性
     int nImages = vstrImageFilenamesRGB.size();
     if(vstrImageFilenamesRGB.empty())
     {
@@ -61,10 +61,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Create SLAM system. It initializes all system threads and gets ready to process frames.
+    // 实例化SLAM系统。它的实例化函数会初始化所有系统线程并准备处理帧。
+    // 参数：字典路径、配置文件路径、摄像头类型、打开viewer
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);
 
-    // Vector for tracking time statistics
+    // 记录每一帧SLAM.TrackRGBD所用时间的向量
     vector<float> vTimesTrack;
     vTimesTrack.resize(nImages);
 
@@ -72,11 +73,13 @@ int main(int argc, char **argv)
     cout << "Start processing sequence ..." << endl;
     cout << "Images in the sequence: " << nImages << endl << endl;
 
-    // Main loop
+    //**************************************************************************************
+    // ****************                         进入主循环                   ****************
+    // *************************************************************************************
     cv::Mat imRGB, imD;
     for(int ni=0; ni<nImages; ni++)
     {
-        // Read image and depthmap from file
+        // 从文件中读取图像、深度、时刻
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
@@ -94,7 +97,7 @@ int main(int argc, char **argv)
         std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
 #endif
 
-        // Pass the image to the SLAM system
+        // 传递一帧图像给SLAM系统
         SLAM.TrackRGBD(imRGB,imD,tframe);
 
 #ifdef COMPILEDWITHC11
@@ -102,28 +105,31 @@ int main(int argc, char **argv)
 #else
         std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
 #endif
-
+        //SLAM系统处理完一帧图像所用时间
         double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
 
         vTimesTrack[ni]=ttrack;
 
-        // Wait to load the next frame
+        // 等待读取下一帧图像（使程序时间和数据集的现实时间同步）
         double T=0;
         if(ni<nImages-1)
-            T = vTimestamps[ni+1]-tframe;
+            T = vTimestamps[ni+1]-tframe;//本帧非最后一帧：本帧图像时间=下一帧图像时刻-本帧图像时刻
         else if(ni>0)
-            T = tframe-vTimestamps[ni-1];
+            T = tframe-vTimestamps[ni-1];//本帧为最后一帧：本帧图像时间=本帧图像时刻-前一帧时刻（当作和前一帧时间一样
 
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
     }
 
-    // Stop all threads
+    //**************************************************************************************
+    // ****************                       退出主循环                     ****************
+    // *************************************************************************************
+
+    // 停止所有SLAM线程
     SLAM.Shutdown();
 
-    // Tracking time statistics
-    sort(vTimesTrack.begin(),vTimesTrack.end());
-    float totaltime = 0;
+    sort(vTimesTrack.begin(),vTimesTrack.end());// 跟踪时间升序排列（结果存入vTimesTrack）
+    float totaltime = 0;//跟踪的总时间
     for(int ni=0; ni<nImages; ni++)
     {
         totaltime+=vTimesTrack[ni];
@@ -132,7 +138,7 @@ int main(int argc, char **argv)
     cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
-    // Save camera trajectory
+    // 保存相机跟踪轨迹和关键帧跟踪轨迹
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
 
@@ -150,12 +156,12 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
         getline(fAssociation,s);
         if(!s.empty())
         {
-            stringstream ss;
+            stringstream ss;//stringstream类型：字符串被空格分隔开，>>一次减少一次
             ss << s;
             double t;
             string sRGB, sD;
             ss >> t;
-            vTimestamps.push_back(t);
+            vTimestamps.push_back(t);//用RGB的时间代表整个RGB-D的时间
             ss >> sRGB;
             vstrImageFilenamesRGB.push_back(sRGB);
             ss >> t;
